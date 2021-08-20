@@ -1,43 +1,41 @@
-import json
 import telebot
+
+from app.fetchers import TestFetcher, TestResultFetcher
 from app.logging import log
 from app.bot import bot
 from app import api
 from app.models import Test, TestResult
-from app.parsers import (
-    # create_question_callback_data,
-    # parse_question_callback_data,
-    # create_test_callback_data,
-    # parse_test_callback_data,
+from app.utils import (
     retrieve_callback_data,
     create_callback_data,
 )
 
-COMMANDS_START = 'start'
-COMMANDS_LIST_TESTS = 'list_tests'
-COMMANDS_LEADERBOARD = 'leaderboard'
-COMMANDS_RESUME_TEST = 'resume_test'
+class Commands:
+    START = 'start'
+    LIST_TESTS = 'list_tests'
+    LEADERBOARD = 'leaderboard'
+    RESUME_TEST = 'resume_test'
 
 
 @log()
-@bot.message_handler(commands=[COMMANDS_START])
+@bot.message_handler(commands=[Commands.START])
 def start_message(message):
     bot.send_message(message.chat.id, 'Hi, you\'ve sent me /start')
     bot.send_message(message.chat.id, f"""List of available commands:
-        /{COMMANDS_LIST_TESTS}
-        /{COMMANDS_RESUME_TEST}
-        /{COMMANDS_LEADERBOARD}
+        /{Commands.LIST_TESTS}
+        /{Commands.RESUME_TEST}
+        /{Commands.LEADERBOARD}
     """)
 
     bot.send_message(message.chat.id, "Please, select one of commands")
 
 
 @log()
-@bot.message_handler(commands=[COMMANDS_LIST_TESTS])
+@bot.message_handler(commands=[Commands.LIST_TESTS])
 def list_tests(message):
-    tests = Test().get_list()
+    tests = TestFetcher.get_list()
     buttons = [
-        telebot.types.InlineKeyboardButton(text=test.get('title'), callback_data=create_callback_data('TEST', test))
+        telebot.types.InlineKeyboardButton(text=test.title, callback_data=create_callback_data('TEST', test))
         for test in tests
     ]
     keyboard = telebot.types.InlineKeyboardMarkup()
@@ -57,13 +55,13 @@ def dispatch_callback(call):
 # @bot.callback_query_handler(func=lambda call: 'test_id' in call.data)
 def start_new_test(call, test):
     # test_id = parse_test_callback_data(call.data)
-    test = Test().get_object(test['id'])
-    test_result = TestResult().create_object(parent_id=test['id'], data={})
+    test_detail = TestFetcher.get_object(test.id)
+    test_result = TestResultFetcher.post_object(parent_id=test.id, obj={})
     bot.edit_message_text(
-        text=f'Test \'{test.get("title")}\' is choosen!',
+        text=f'Test \'{test.title}\' is chosen!',
         message_id=call.message.message_id,
         chat_id=call.message.chat.id)
-    next_question(call, test, test_result)
+    next_question(call, test_detail, test_result)
 
 
 
@@ -73,9 +71,10 @@ def start_new_test(call, test):
 def next_question(call, test, test_result):
     # test_result = call.data.get('test_result')
     # test_result = api.get_test_result(test_result.get('id'))
-    question = next(
-        filter(lambda t: t[Test.ORDER_NUMBER] == test_result.get(TestResult.CURRENT_ORDER_NUMBER), test['questions'])
-    )
+    question = next(filter(lambda q: q.order_number == test_result.current_order_number, test.questions))
+
+
+    # WE ARE HERE!
 
 
     keyboard = telebot.types.InlineKeyboardMarkup()
@@ -139,7 +138,7 @@ def next_question(call, test, test_result):
 #
 #
 # @log
-# @bot.message_handler(commands=[COMMANDS_LEADERBOARD])u
+# @bot.message_handler(commands=[Commands.LEADERBOARD])u
 # def show_leaderboard(message):
 #     users = api.get_users()
 #     leaderboard = '\n'.join(

@@ -1,10 +1,23 @@
 from pydantic import BaseModel, Field
+from typing import List, Optional
+
+
+class Choice(BaseModel):
+    text: str
+    is_correct: bool
+
+
+class Question(BaseModel):
+    text: str
+    order_number: int
+    choices: Optional[List[Choice]] = []
 
 
 class Test(BaseModel):
     id: int
     title: str
-    state: str
+    questions_count: int
+    questions: Optional[List[Question]] = []
 
 
 class TestResult(BaseModel):
@@ -14,15 +27,6 @@ class TestResult(BaseModel):
     # 'user',
     state: int
     get_state_display: str
-
-
-class Question(BaseModel):
-    order_number: int
-
-
-class Choice(BaseModel):
-    text: str
-    is_correct: bool
 
 
 class User(BaseModel):

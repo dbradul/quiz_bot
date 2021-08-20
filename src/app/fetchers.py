@@ -1,57 +1,53 @@
 from app.api import ApiClient, BASE_API_URL
-from app.models import Test
+from app.models import Test, TestResult, Question, Choice, User
 
 
 class BaseApiFetcher:
     entity_name = ''
     model = None
+    client = ApiClient(BASE_API_URL)
 
-    def __init__(self):
-        self.client = self.get_client()
+    @classmethod
+    def get_list_url(cls, **kwargs):
+        return f'{cls.client.base_url}/{cls.entity_name}/'
 
-    def get_client(self):
-        return ApiClient(BASE_API_URL)
+    @classmethod
+    def get_object_url(cls, pk):
+        return f'{cls.client.base_url}/{cls.entity_name}/{pk}'
 
-    def get_list_url(self, **kwargs):
-        return f'{self.client.base_url}/{self.entity_name}/'
+    @classmethod
+    def get_list(cls):
+        url = cls.get_list_url()
+        values = cls.client.get(url)
+        return [cls.model(**value) for value in values]
 
-    def get_object_url(self, pk):
-        return f'{self.client.base_url}/{self.entity_name}/{pk}'
+    @classmethod
+    def get_object(cls, id):
+        url = cls.get_object_url(id)
+        value = cls.client.get(url)
+        return cls.model(**value)
 
-    def get_list(self):
-        url = self.get_list_url()
-        return self.client.get(url)
+    @classmethod
+    def post_object(cls, obj, **kwargs):
+        url = cls.get_list_url(**kwargs)
+        payload = obj.dict() if obj else {}
+        value = cls.client.post(url, payload)
+        return cls.model(**value)
 
-    # @classmethod
-    # def get_list(cls):
-    #     url = cls.get_list_url()
-    #     return cls.get_client().get(url)
-
-    def get_object(self, id):
-        url = self.get_object_url(id)
-        return self.client.get(url)
-
-    def create_object(self, data, **kwargs):
-        url = self.get_list_url()
-        return self.client.post(url, data)
-
-    def update_object(self, pk, data, **kwargs):
-        url = self.get_object_url(pk)
-        return self.client.patch(url, data)
+    @classmethod
+    def update_object(cls, obj, **kwargs):
+        url = cls.get_object_url(obj.id)
+        return cls.client.patch(url, obj.dict())
 
 
 class RelatedApiFetcher(BaseApiFetcher):
     parent_entity_name = ''
     entity_name = ''
 
-    def get_list_url(self, **kwargs):
+    @classmethod
+    def get_list_url(cls, **kwargs):
         parent_id = kwargs.get('parent_id')
-        return f'{self.client.base_url}/{self.parent_entity_name}/{parent_id}/{self.entity_name}/'
-
-    def create_object(self, data, **kwargs):
-        parent_id = kwargs.get('parent_id')
-        url = self.get_list_url(parent_id=parent_id)
-        return self.client.post(url, data)
+        return f'{cls.client.base_url}/{cls.parent_entity_name}/{parent_id}/{cls.entity_name}/'
 
 
 class TestFetcher(BaseApiFetcher):
@@ -62,15 +58,19 @@ class TestFetcher(BaseApiFetcher):
 class TestResultFetcher(RelatedApiFetcher):
     parent_entity_name = 'tests'
     entity_name = 'results'
+    model = TestResult
 
 
 class QuestionFetcher(BaseApiFetcher):
     entity_name = 'questions'
+    model = Question
 
 
 class ChoiceFetcher(BaseApiFetcher):
     entity_name = 'choices'
+    model = Choice
 
 
 class UserFetcher(BaseApiFetcher):
     entity_name = 'users'
+    model = User
