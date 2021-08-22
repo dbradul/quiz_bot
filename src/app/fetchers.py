@@ -13,7 +13,7 @@ class BaseApiFetcher:
 
     @classmethod
     def get_object_url(cls, pk):
-        return f'{cls.client.base_url}/{cls.entity_name}/{pk}'
+        return f'{cls.client.base_url}/{cls.entity_name}/{pk}/'
 
     @classmethod
     def get_list(cls):
@@ -28,16 +28,16 @@ class BaseApiFetcher:
         return cls.model(**value)
 
     @classmethod
-    def post_object(cls, obj, **kwargs):
+    def post_object(cls, data, **kwargs):
         url = cls.get_list_url(**kwargs)
-        payload = obj.dict() if obj else {}
-        value = cls.client.post(url, payload)
+        value = cls.client.post(url, data)
         return cls.model(**value)
 
     @classmethod
     def update_object(cls, obj, **kwargs):
         url = cls.get_object_url(obj.id)
-        return cls.client.patch(url, obj.dict())
+        value = cls.client.patch(url, obj.dict())
+        return cls.model(**value)
 
 
 class RelatedApiFetcher(BaseApiFetcher):
