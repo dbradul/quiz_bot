@@ -5,6 +5,7 @@ log_level = logging.INFO #DEBUG
 logging.basicConfig(level=log_level, filename=log_file, filemode="w+",
                     format="%(asctime)-15s %(levelname)-8s %(message)s")
 logger = logging.getLogger("quiz_bot")
+logger.addHandler(logging.StreamHandler())
 
 
 def entering(func):
@@ -16,10 +17,6 @@ def exiting(func):
     """ Post function logging """
     logger.debug("Exited  %s", func.__name__)
 
-
-# def log(func=None, *, pre=entering, post=exiting):
-#     if func is not None:
-#         return lambda func: log(func, pre=entering, post=exiting)
 
 def log(pre=entering, post=exiting):
 

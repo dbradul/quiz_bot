@@ -10,17 +10,6 @@ class TestRunner(Generator):
         self.num_incorrect_answers = 0
         self.points = 0
 
-    # def __iter__(self):
-    #     for question in self.test.questions:
-    #         choice = yield question
-    #         self.current_step += 1
-    #         self.num_correct_answers += int(choice.is_correct)
-    #         self.num_incorrect_answers += 1 - int(choice.is_correct)
-    #
-    #     self.point = max(0, self.num_correct_answers - self.num_incorrect_answers)
-    #
-    #     return None
-
     def send(self, choice=None):
         if choice is not None:
             self.current_step += 1

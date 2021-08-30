@@ -11,7 +11,6 @@ class BaseApiModelFetcher(BaseApiFetcher):
     model = None
 
     def __init__(self, user):
-        # TODO: DI client
         type(self).client = JWTApiClient(base_url=BASE_API_URL, jwt_token=user.jwt_token)
 
     @classmethod
