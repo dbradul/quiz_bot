@@ -1,16 +1,21 @@
+import re
 from enum import Enum
 
 import telebot
 
-from app.fetchers import TestFetcher, TestResultFetcher, QuestionFetcher, UserFetcher
-from app.logging import log
+from app.api import BASE_API_URL, ApiClient, NOT_AUTHORIZED_MESSAGE
+from app.utils import user_id_map, login_required
+from app.fetchers import TestModelFetcher, TestResultFetcher, QuestionModelFetcher, UserModelFetcher
 from app.bot import bot
-from app.controllers import TestRunner
-from app.models import Test, TestResult
+from app.controller import TestRunner
+from app.models import TestResult, User
 from app.utils import (
     retrieve_callback_data,
     create_callback_data,
 )
+
+UUID_PATTERN = '/start ([0-9a-fA-F\-]{36})'
+
 
 class Commands(Enum):
     START = 'start'
@@ -23,18 +28,26 @@ class Commands(Enum):
         return '/'+'\n/'.join(c.value for c in cls)
 
 
-@log()
 @bot.message_handler(commands=[Commands.START.value])
 def start_message(message):
-    bot.send_message(message.chat.id, 'Hi, you\'ve sent me /start')
-    bot.send_message(message.chat.id, f"""List of available commands:\n{Commands.list()}""")
-    bot.send_message(message.chat.id, "Please, select one of commands")
+    if re.match(UUID_PATTERN, message.text):
+        auth_token = re.match(UUID_PATTERN, message.text).group(1)
+        response = ApiClient(BASE_API_URL).get(path=f'tg_auth/{auth_token}/')
+        user_id_map[message.chat.id] = User(**response)
+
+    elif message.chat.id not in user_id_map:
+        bot.send_message(message.chat.id, NOT_AUTHORIZED_MESSAGE)
+        return
+
+    client_info = user_id_map[message.chat.id]
+    bot.send_message(message.chat.id, f'Hi, {client_info.username}! 👋 How are you? 🙃')
+    bot.send_message(message.chat.id, f"Please, select one of the available commands:\n{Commands.list()}")
 
 
-@log()
 @bot.message_handler(commands=[Commands.LIST_TESTS.value])
+@login_required
 def list_tests(message):
-    tests = TestFetcher.get_list()
+    tests = TestModelFetcher(message.user).get_list()
     buttons = [
         telebot.types.InlineKeyboardButton(
             text=test.title,
@@ -47,81 +60,78 @@ def list_tests(message):
     bot.send_message(message.chat.id, "Let's select one of the available tests:", reply_markup=keyboard)
 
 
-@log()
 @bot.callback_query_handler(func=lambda call: 'TEST' in call.data)
+@login_required
 def start_new_test(call):
     test = retrieve_callback_data(call.data)
-    test_detail = TestFetcher.get_object(test.id)
-    test_result = TestResultFetcher.post_object(parent_id=test.id, data={
-        'state': TestResult.State.NEW.value,
-        'current_order_number': 1,
-    })
+    test_detail = TestModelFetcher(call.user).get_object(test.id)
     bot.edit_message_text(
         text=f'Test \'{test.title}\' is chosen!',
         message_id=call.message.message_id,
         chat_id=call.message.chat.id
     )
 
-    # test_runner = TestRunner(test_detail)
-    next_question(call, test_detail, test_result)
-    # next_question(call, test_runner)
+    test_runner = TestRunner(test_detail)
+    next(test_runner)
+    next_question(call, test_runner)
 
 
-@log()
-def next_question(call, test, test_result):
-    question = test.questions[test_result.current_order_number-1]
-    question_detail = QuestionFetcher.get_object(question.id)
-    test_buttons = [
+def next_question(call, test_runner):
+    question = test_runner.current_question
+    question_detail = QuestionModelFetcher(call.user).get_object(question.id)
+
+    choice_buttons = [
         telebot.types.InlineKeyboardButton(
             text=choice.text,
-            callback_data=create_callback_data('CHOICE', (choice, test, test_result))
+            callback_data=create_callback_data('CHOICE', (choice, test_runner))
         )
         for idx, choice in enumerate(question_detail.choices)
     ]
     keyboard = telebot.types.InlineKeyboardMarkup()
-    keyboard.row(*test_buttons)
+    keyboard.row(*choice_buttons)
     bot.send_message(
         chat_id=call.message.chat.id,
-        text=f'Question #{test_result.current_order_number}/{test_result.questions_count}: {question.text}',
+        text=f'Question #{test_runner.current_step}/{test_runner.questions_count}: {question.text}',
         reply_markup=keyboard
     )
 
 
-@log()
 @bot.callback_query_handler(func=lambda call: 'CHOICE' in call.data)
+@login_required
 def on_choice_selection(call):
-    choice, test, test_result = retrieve_callback_data(call.data)
-    question = test.questions[test_result.current_order_number-1]
+    choice, test_runner = retrieve_callback_data(call.data)
 
     result_info = '✅' if choice.is_correct else '❌'
     bot.edit_message_text(
-        text=f'Answer {question.text} -> {choice.text}:' + result_info,
+        text=f'Answer {test_runner.current_question.text} -> {choice.text}:' + result_info,
         message_id=call.message.message_id,
         chat_id=call.message.chat.id
     )
 
-    test_result.num_correct_answers += int(choice.is_correct)
-    test_result.num_incorrect_answers += 1 - int(choice.is_correct)
-
-    if test_result.current_order_number == test_result.questions_count:
-        test_result = TestResultFetcher.update_object(test_result)
+    question = test_runner.send(choice)
+    if question is None:
+        test_result = TestResult(
+            state=TestResult.State.FINISHED.value,
+            current_order_number=test_runner.current_step,
+            num_correct_answers=test_runner.num_correct_answers,
+            num_incorrect_answers=test_runner.num_incorrect_answers,
+        )
+        test_result = TestResultFetcher(call.user).post_object(parent_id=test_runner.test.id, obj=test_result)
         bot.send_message(
             chat_id=call.message.chat.id,
-            text='Test is accomplished!\n'\
-                 'Your result is: '\
-                 f'{test_result.num_correct_answers}/{test_result.questions_count}'\
-                 f'{(test_result.num_correct_answers == test_result.questions_count) and "Well done! 👍" or ""}'
+            text=f'{call.user.username}, test is accomplished!\n' +
+                 'Your result is: ' +
+                 f'{test_result.num_correct_answers}/{test_result.questions_count}' +
+                 f'{(test_result.num_correct_answers == test_result.questions_count) and "  Well done! 👍" or ""}'
         )
     else:
-        test_result.current_order_number += 1
-        test_result = TestResultFetcher.update_object(test_result)
-        next_question(call, test, test_result)
+        next_question(call, test_runner)
 
 
-@log
 @bot.message_handler(commands=[Commands.LEADERBOARD.value])
+@login_required
 def show_leaderboard(message):
-    users = UserFetcher.get_list()
+    users = UserModelFetcher(message.user).get_list()
     leaderboard = '\n'.join(
         f"{user.username:<20} {user.rating}"
         for user in users
@@ -133,8 +143,9 @@ def show_leaderboard(message):
     """, parse_mode="Markdown")
 
 
-@log()
+
 @bot.message_handler(content_types=['text', 'url'])
 def send_text(message):
     bot.send_message(message.chat.id, 'Sorry! Did not get your request: %s' % message.text)
     bot.send_message(message.chat.id, 'Please, try /start command')
+

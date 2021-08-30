@@ -1,6 +1,12 @@
 import uuid
 
+from app.api import NOT_AUTHORIZED_MESSAGE, NotAuthorizedException
+from app.bot import bot
+
 callback_data_map = {}
+
+# TODO: replaced with DB
+user_id_map = {}
 
 
 def create_callback_data(key, value):
@@ -12,3 +18,43 @@ def create_callback_data(key, value):
 
 def retrieve_callback_data(compound_key):
     return callback_data_map.get(compound_key)
+
+
+
+def login_required(func):
+    """ Decorator """
+
+    def call(message):
+        """ Actual wrapping """
+
+        if hasattr(message, 'data'):  # callback
+            chat_id = message.message.chat.id
+        else:  # command
+            chat_id = message.chat.id
+
+        if chat_id not in user_id_map:
+            bot.send_message(
+                chat_id=chat_id,
+                text=NOT_AUTHORIZED_MESSAGE
+            )
+            return
+        else:
+            user = user_id_map[chat_id]
+            message.__dict__['user'] = user
+
+        try:
+            result = func(message)
+            return result
+        except NotAuthorizedException:
+            bot.send_message(
+                chat_id=chat_id,
+                text=NOT_AUTHORIZED_MESSAGE
+            )
+        except Exception as ex:
+            bot.send_message(
+                chat_id=chat_id,
+                text=f'Something is not quite right :(\n Error details: {ex!r}'
+            )
+
+    return call
+s

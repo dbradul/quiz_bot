@@ -2,21 +2,22 @@ import json
 import os
 import requests
 
-# Endpoints
-BASE_API_URL = os.environ.get('API_URL')
-# BACKEND_API_TEST = f'{base_api_url}/tests/'
-# BACKEND_API_TEST_DETAIL = f'{base_api_url}/tests/' '{0}/'
-# BACKEND_API_TEST_RESULT = f'{base_api_url}/tests/' '{0}/results/'
-# BACKEND_API_TEST_RESULT_DETAIL = f'{base_api_url}/results/' '{0}/'
-# BACKEND_API_TEST_CHOICE_DETAIL = f'{base_api_url}/choices/' '{0}/'
-# BACKEND_API_TEST_QUESTION = f'{base_api_url}/tests/' '{0}/questions'
-# BACKEND_API_TEST_QUESTION_DETAIL = f'{base_api_url}/tests/' '{0}/questions/' '{1}/'
-# BACKEND_API_USER = f'{base_api_url}/users/'
+BASE_BACKEND_URL = os.environ.get('BASE_BACKEND_URL')
+BASE_API_URL = f'{BASE_BACKEND_URL}/api/v1'
+BACKEND_AUTHORISE_URL = f'{BASE_BACKEND_URL}/api/v1/tg_introduce/'
+NOT_AUTHORIZED_MESSAGE = "I don't know who you are :( \n" \
+                         "Please, introduce yourself: https://bit.ly/2WzTjM2"
+                         # f"Please, introduce yourself: {BACKEND_AUTHORISE_URL}"
+
+
+class NotAuthorizedException(Exception):
+    pass
 
 
 class ApiClient:
     HTTP_OK = 200
     HTTP_OK_CREATE = 201
+    HTTP_UNAUTHORIZED = 401
 
     METHOD_SUCCESS_CODES = {
         'get': HTTP_OK,
@@ -29,14 +30,26 @@ class ApiClient:
 
     def _request(self, method, url, **kwargs):
         request_method = getattr(requests, method)
-        params = {'url': url}
-        params.update(kwargs)
+        params = self.get_params(url, **kwargs)
         response = request_method(**params)
         if response.status_code == self.METHOD_SUCCESS_CODES.get(method, 0):
             return json.loads(response.text)
+        elif response.status_code == self.HTTP_UNAUTHORIZED:
+            raise NotAuthorizedException()
         raise RuntimeError(f'{method.capitalize()} response: {response.status_code}, {response.reason}')
 
-    def get(self, url):
+    def get_params(self, url, **kwargs):
+        params = {'url': url}
+        params.update(kwargs)
+        return params
+
+    def get_url(self, path):
+        return f'{self.base_url}/{path}'
+
+    def get(self, url=None, path=None):
+        assert not url or not path, "One of the parameters 'url' or 'path' should be passed"
+        if url is None:
+            url = self.get_url(path)
         return self._request('get', url)
 
     def post(self, url, payload):
@@ -44,3 +57,17 @@ class ApiClient:
 
     def patch(self, url, payload):
         return self._request('patch', url, data=payload)
+
+
+class JWTApiClient(ApiClient):
+    def __init__(self, base_url, jwt_token):
+        super().__init__(base_url)
+        self.jwt_token = jwt_token
+
+    def get_params(self, url, **kwargs):
+        params = super().get_params(url, **kwargs)
+        auth_header = {'Authorization': f'Bearer {self.jwt_token}'}
+        headers = {'headers': auth_header}
+        params.update(headers)
+        return params
+

@@ -1,11 +1,18 @@
-from app.api import ApiClient, BASE_API_URL
+from app.api import ApiClient, BASE_API_URL, JWTApiClient
 from app.models import Test, TestResult, Question, Choice, User
 
 
 class BaseApiFetcher:
+    client = ApiClient(BASE_API_URL)
+
+
+class BaseApiModelFetcher(BaseApiFetcher):
     entity_name = ''
     model = None
-    client = ApiClient(BASE_API_URL)
+
+    def __init__(self, user):
+        # TODO: DI client
+        type(self).client = JWTApiClient(base_url=BASE_API_URL, jwt_token=user.jwt_token)
 
     @classmethod
     def get_list_url(cls, **kwargs):
@@ -28,9 +35,9 @@ class BaseApiFetcher:
         return cls.model(**value)
 
     @classmethod
-    def post_object(cls, data, **kwargs):
+    def post_object(cls, obj, **kwargs):
         url = cls.get_list_url(**kwargs)
-        value = cls.client.post(url, data)
+        value = cls.client.post(url, obj.dict(exclude_unset=True))
         return cls.model(**value)
 
     @classmethod
@@ -40,7 +47,7 @@ class BaseApiFetcher:
         return cls.model(**value)
 
 
-class RelatedApiFetcher(BaseApiFetcher):
+class RelatedApiModelFetcher(BaseApiModelFetcher):
     parent_entity_name = ''
     entity_name = ''
 
@@ -50,27 +57,27 @@ class RelatedApiFetcher(BaseApiFetcher):
         return f'{cls.client.base_url}/{cls.parent_entity_name}/{parent_id}/{cls.entity_name}/'
 
 
-class TestFetcher(BaseApiFetcher):
+class TestModelFetcher(BaseApiModelFetcher):
     entity_name = 'tests'
     model = Test
 
 
-class TestResultFetcher(RelatedApiFetcher):
+class TestResultFetcher(RelatedApiModelFetcher):
     parent_entity_name = 'tests'
     entity_name = 'results'
     model = TestResult
 
 
-class QuestionFetcher(BaseApiFetcher):
+class QuestionModelFetcher(BaseApiModelFetcher):
     entity_name = 'questions'
     model = Question
 
 
-class ChoiceFetcher(BaseApiFetcher):
+class ChoiceModelFetcher(BaseApiModelFetcher):
     entity_name = 'choices'
     model = Choice
 
 
-class UserFetcher(BaseApiFetcher):
+class UserModelFetcher(BaseApiModelFetcher):
     entity_name = 'users'
     model = User

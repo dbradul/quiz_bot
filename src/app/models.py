@@ -1,6 +1,6 @@
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import List, Optional
 
 
@@ -28,15 +28,16 @@ class TestResult(BaseModel):
         NEW = 0
         FINISHED = 1
 
-    id: int
-    questions_count: int
+    id: Optional[int]
+    questions_count: Optional[int]
     current_order_number: int
     num_correct_answers: int
     num_incorrect_answers: int
     state: int
-    get_state_display: str
+    get_state_display: Optional[str]
 
 
 class User(BaseModel):
-    rating: float
     username: str
+    jwt_token: Optional[str] = ''
+    rating: Optional[float]

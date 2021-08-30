@@ -17,7 +17,12 @@ def exiting(func):
     logger.debug("Exited  %s", func.__name__)
 
 
+# def log(func=None, *, pre=entering, post=exiting):
+#     if func is not None:
+#         return lambda func: log(func, pre=entering, post=exiting)
+
 def log(pre=entering, post=exiting):
+
     """ Wrapper """
     def decorate(func):
         """ Decorator """
