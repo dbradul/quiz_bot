@@ -5,9 +5,7 @@ import requests
 BASE_BACKEND_URL = os.environ.get('BASE_BACKEND_URL')
 BASE_API_URL = f'{BASE_BACKEND_URL}/api/v1'
 BACKEND_AUTHORISE_URL = f'{BASE_BACKEND_URL}/api/v1/tg_introduce/'
-NOT_AUTHORIZED_MESSAGE = "I don't know who you are :( \n" \
-                         "Please, introduce yourself: https://bit.ly/2WzTjM2"
-                         # f"Please, introduce yourself: {BACKEND_AUTHORISE_URL}"
+NOT_AUTHORIZED_MESSAGE = "I don't know who you are :( Please, introduce yourself."
 
 
 class NotAuthorizedException(Exception):

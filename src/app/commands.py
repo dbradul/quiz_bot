@@ -2,12 +2,13 @@ import re
 from enum import Enum
 
 import telebot
+from telebot import types
 
-from app.api import BASE_API_URL, ApiClient, NOT_AUTHORIZED_MESSAGE
+from app.api import BASE_API_URL, ApiClient, NOT_AUTHORIZED_MESSAGE, BACKEND_AUTHORISE_URL
 from app.utils import user_id_map, login_required
 from app.fetchers import TestModelFetcher, TestResultFetcher, QuestionModelFetcher, UserModelFetcher
 from app.bot import bot
-from app.controller import TestRunner
+from app.services import TestRunner
 from app.models import TestResult, User
 from app.utils import (
     retrieve_callback_data,
@@ -36,7 +37,10 @@ def start_message(message):
         user_id_map[message.chat.id] = User(**response)
 
     elif message.chat.id not in user_id_map:
-        bot.send_message(message.chat.id, NOT_AUTHORIZED_MESSAGE)
+        keyboard = types.InlineKeyboardMarkup()
+        url_button = types.InlineKeyboardButton(text="Log in Quiz 🔑", url=f"{BACKEND_AUTHORISE_URL}")
+        keyboard.add(url_button)
+        bot.send_message(message.chat.id, NOT_AUTHORIZED_MESSAGE, reply_markup=keyboard)
         return
 
     client_info = user_id_map[message.chat.id]

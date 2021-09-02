@@ -5,7 +5,7 @@ from app.bot import bot
 
 callback_data_map = {}
 
-# TODO: replaced with DB
+# TODO: could be replaced with DB
 user_id_map = {}
 
 
@@ -18,7 +18,6 @@ def create_callback_data(key, value):
 
 def retrieve_callback_data(compound_key):
     return callback_data_map.get(compound_key)
-
 
 
 def login_required(func):
@@ -57,4 +56,3 @@ def login_required(func):
             )
 
     return call
-s

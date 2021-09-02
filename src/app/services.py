@@ -1,8 +1,7 @@
 from collections import Generator
 
-class TestRunner(Generator):
-# class TestRunner:
 
+class TestRunner(Generator):
     def __init__(self, test):
         self.test = test
         self.current_step = 0
