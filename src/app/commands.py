@@ -2,20 +2,19 @@ import re
 from enum import Enum
 
 import telebot
-from telebot import types
 
-from app.api import BASE_API_URL, ApiClient, NOT_AUTHORIZED_MESSAGE, BACKEND_AUTHORISE_URL
+from app.api import BASE_API_URL, ApiClient
 from app.utils import user_id_map, login_required
 from app.fetchers import TestModelFetcher, TestResultFetcher, QuestionModelFetcher, UserModelFetcher
 from app.bot import bot
-from app.services import TestRunner
+from app.services import TestRunner, TestRunner2
 from app.models import TestResult, User
 from app.utils import (
     retrieve_callback_data,
     create_callback_data,
 )
 
-UUID_PATTERN = '/start ([0-9a-fA-F\-]{36})'
+AUTH_TOKEN_PATTERN = '/start ([0-9a-fA-F\-]{36})'
 
 
 class Commands(Enum):
@@ -29,20 +28,17 @@ class Commands(Enum):
         return '/'+'\n/'.join(c.value for c in cls)
 
 
-@bot.message_handler(commands=[Commands.START.value])
+@bot.message_handler(regexp=AUTH_TOKEN_PATTERN)
+def auth_message(message):
+    auth_token = re.match(AUTH_TOKEN_PATTERN, message.text).group(1)
+    response = ApiClient(BASE_API_URL).get(path=f'tg_auth/{auth_token}/')
+    user_id_map[message.chat.id] = User(**response)
+    start_message(message)
+
+
+@bot.message_handler(regexp='/start$')
+@login_required
 def start_message(message):
-    if re.match(UUID_PATTERN, message.text):
-        auth_token = re.match(UUID_PATTERN, message.text).group(1)
-        response = ApiClient(BASE_API_URL).get(path=f'tg_auth/{auth_token}/')
-        user_id_map[message.chat.id] = User(**response)
-
-    elif message.chat.id not in user_id_map:
-        keyboard = types.InlineKeyboardMarkup()
-        url_button = types.InlineKeyboardButton(text="Log in Quiz 🔑", url=f"{BACKEND_AUTHORISE_URL}")
-        keyboard.add(url_button)
-        bot.send_message(message.chat.id, NOT_AUTHORIZED_MESSAGE, reply_markup=keyboard)
-        return
-
     client_info = user_id_map[message.chat.id]
     bot.send_message(message.chat.id, f'Hi, {client_info.username}! 👋 How are you? 🙃')
     bot.send_message(message.chat.id, f"Please, select one of the available commands:\n{Commands.list()}")
@@ -59,8 +55,7 @@ def list_tests(message):
         )
         for test in tests
     ]
-    keyboard = telebot.types.InlineKeyboardMarkup()
-    keyboard.row(*buttons)
+    keyboard = telebot.types.InlineKeyboardMarkup().row(*buttons)
     bot.send_message(message.chat.id, "Let's select one of the available tests:", reply_markup=keyboard)
 
 
@@ -68,21 +63,27 @@ def list_tests(message):
 @login_required
 def start_new_test(call):
     test = retrieve_callback_data(call.data)
-    test_detail = TestModelFetcher(call.user).get_object(test.id)
     bot.edit_message_text(
         text=f'Test \'{test.title}\' is chosen!',
         message_id=call.message.message_id,
         chat_id=call.message.chat.id
     )
 
+    test_detail = TestModelFetcher(call.user).get_object(test.id)
     test_runner = TestRunner(test_detail)
     next(test_runner)
     next_question(call, test_runner)
+    # TestRunner2(call, test.id)\
+    #     .add_callback('NEXT', next_question)
+    #     .add_callback('FINISH', finish)
+    #     .run()
 
 
 def next_question(call, test_runner):
     question = test_runner.current_question
     question_detail = QuestionModelFetcher(call.user).get_object(question.id)
+
+
 
     choice_buttons = [
         telebot.types.InlineKeyboardButton(
@@ -91,8 +92,7 @@ def next_question(call, test_runner):
         )
         for idx, choice in enumerate(question_detail.choices)
     ]
-    keyboard = telebot.types.InlineKeyboardMarkup()
-    keyboard.row(*choice_buttons)
+    keyboard = telebot.types.InlineKeyboardMarkup().row(*choice_buttons)
     bot.send_message(
         chat_id=call.message.chat.id,
         text=f'Question #{test_runner.current_step}/{test_runner.questions_count}: {question.text}',

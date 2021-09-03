@@ -1,6 +1,8 @@
 import uuid
 
-from app.api import NOT_AUTHORIZED_MESSAGE, NotAuthorizedException
+from telebot import types
+
+from app.api import NOT_AUTHORIZED_MESSAGE, NotAuthorizedException, BACKEND_AUTHORISE_URL
 from app.bot import bot
 
 callback_data_map = {}
@@ -25,6 +27,9 @@ def login_required(func):
 
     def call(message):
         """ Actual wrapping """
+        keyboard = types.InlineKeyboardMarkup().add(
+            types.InlineKeyboardButton(text="Log in Quiz 🔑", url=f"{BACKEND_AUTHORISE_URL}")
+        )
 
         if hasattr(message, 'data'):  # callback
             chat_id = message.message.chat.id
@@ -34,7 +39,8 @@ def login_required(func):
         if chat_id not in user_id_map:
             bot.send_message(
                 chat_id=chat_id,
-                text=NOT_AUTHORIZED_MESSAGE
+                text=NOT_AUTHORIZED_MESSAGE,
+                reply_markup=keyboard
             )
             return
         else:
@@ -47,7 +53,8 @@ def login_required(func):
         except NotAuthorizedException:
             bot.send_message(
                 chat_id=chat_id,
-                text=NOT_AUTHORIZED_MESSAGE
+                text=NOT_AUTHORIZED_MESSAGE,
+                reply_markup=keyboard
             )
         except Exception as ex:
             bot.send_message(
