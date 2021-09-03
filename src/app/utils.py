@@ -5,8 +5,10 @@ from telebot import types
 from app.api import NOT_AUTHORIZED_MESSAGE, NotAuthorizedException, BACKEND_AUTHORISE_URL
 from app.bot import bot
 
+# Used to associate TG-bot-cb-id with our data. Needed to overcome TG's limit for the length of cb data.
 callback_data_map = {}
 
+# Used to associate unique user TG id with our auth data
 # TODO: could be replaced with DB
 user_id_map = {}
 

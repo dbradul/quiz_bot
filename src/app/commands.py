@@ -5,10 +5,10 @@ import telebot
 
 from app.api import BASE_API_URL, ApiClient
 from app.utils import user_id_map, login_required
-from app.fetchers import TestModelFetcher, TestResultFetcher, QuestionModelFetcher, UserModelFetcher
+from app.fetchers import TestModelFetcher, UserModelFetcher
 from app.bot import bot
-from app.services import TestRunner, TestRunner2
-from app.models import TestResult, User
+from app.services import TestRunner
+from app.models import User
 from app.utils import (
     retrieve_callback_data,
     create_callback_data,
@@ -69,22 +69,13 @@ def start_new_test(call):
         chat_id=call.message.chat.id
     )
 
-    test_detail = TestModelFetcher(call.user).get_object(test.id)
-    test_runner = TestRunner(test_detail)
-    next(test_runner)
-    next_question(call, test_runner)
-    # TestRunner2(call, test.id)\
-    #     .add_callback('NEXT', next_question)
-    #     .add_callback('FINISH', finish)
-    #     .run()
+    TestRunner(call, test.id)\
+        .add_callback(TestRunner.NEXT, next)\
+        .add_callback(TestRunner.FINISH, finish)\
+        .run()
 
 
-def next_question(call, test_runner):
-    question = test_runner.current_question
-    question_detail = QuestionModelFetcher(call.user).get_object(question.id)
-
-
-
+def next(call, test_runner, question_detail):
     choice_buttons = [
         telebot.types.InlineKeyboardButton(
             text=choice.text,
@@ -95,8 +86,18 @@ def next_question(call, test_runner):
     keyboard = telebot.types.InlineKeyboardMarkup().row(*choice_buttons)
     bot.send_message(
         chat_id=call.message.chat.id,
-        text=f'Question #{test_runner.current_step}/{test_runner.questions_count}: {question.text}',
+        text=f'Question #{test_runner.current_step}/{test_runner.questions_count}: {question_detail.text}',
         reply_markup=keyboard
+    )
+
+
+def finish(call, _, test_result):
+    bot.send_message(
+        chat_id=call.message.chat.id,
+        text=f'{call.user.username}, test is accomplished!\n' +
+             'Your result is: ' +
+             f'{test_result.num_correct_answers}/{test_result.questions_count}' +
+             f'{(test_result.num_correct_answers == test_result.questions_count) and "  Well done! 👍" or ""}'
     )
 
 
@@ -112,24 +113,7 @@ def on_choice_selection(call):
         chat_id=call.message.chat.id
     )
 
-    question = test_runner.send(choice)
-    if question is None:
-        test_result = TestResult(
-            state=TestResult.State.FINISHED.value,
-            current_order_number=test_runner.current_step,
-            num_correct_answers=test_runner.num_correct_answers,
-            num_incorrect_answers=test_runner.num_incorrect_answers,
-        )
-        test_result = TestResultFetcher(call.user).post_object(parent_id=test_runner.test.id, obj=test_result)
-        bot.send_message(
-            chat_id=call.message.chat.id,
-            text=f'{call.user.username}, test is accomplished!\n' +
-                 'Your result is: ' +
-                 f'{test_result.num_correct_answers}/{test_result.questions_count}' +
-                 f'{(test_result.num_correct_answers == test_result.questions_count) and "  Well done! 👍" or ""}'
-        )
-    else:
-        next_question(call, test_runner)
+    test_runner.send(choice)
 
 
 @bot.message_handler(commands=[Commands.LEADERBOARD.value])
@@ -145,7 +129,6 @@ def show_leaderboard(message):
 {leaderboard}
     ```
     """, parse_mode="Markdown")
-
 
 
 @bot.message_handler(content_types=['text', 'url'])
